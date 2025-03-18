@@ -1,5 +1,5 @@
 # Creación del nuevo dataset de agua --------------------------------------
-dataset_water <- function(ruta = "data"){
+dataset_water <- function(ruta){
   # Creamos una funciónn para la selección de los valores excel deseados:
   agua <- function(origen_df){
     a <- readxl::read_xls(origen_df, skip = 19) %>%
@@ -14,16 +14,29 @@ dataset_water <- function(ruta = "data"){
     
     b <- readxl::read_xls(origen_df, skip = 15, col_names = TRUE) %>% 
       filter(`Fecha monitoreo` %in% c("Hora Monitoreo", "PARAMETROS")) %>% 
-      select(where(~ any(!is.na(.)))) %>% select(-starts_with(c( "DD", "..."))) %>% 
+      select(where(~ any(!is.na(.)))) %>% 
+      select(-starts_with(c( "DD", "..."))) %>% 
       pivot_longer(cols = -`Fecha monitoreo`, names_to = "fecha", values_to = "hora") %>% 
+      mutate(hora = ifelse(is.na(hora), "12:00", hora),
+             hora = ifelse(grepl("^\\d*\\.\\d+$", hora),
+                           sapply(hora, function(x) {
+                             decimal_time <- as.numeric(x)
+                             hours <- floor(decimal_time * 24)
+                             minutes <- round((decimal_time * 24 - hours) * 60)
+                             sprintf("%02d:%02d:%02d", hours, minutes, 0)}),hora)) %>% 
       pivot_wider(id_cols = fecha, names_from = `Fecha monitoreo`, values_from = hora) %>% 
       mutate(fecha = str_replace(fecha, "\\.\\.\\.\\d+$", ""),
              fecha_larga = as.POSIXct(paste(fecha, `Hora Monitoreo`), format = "%d/%m/%Y %H:%M")) %>%
       select(fecha_larga, PARAMETROS) %>% rename("codigo" = "PARAMETROS")
     
-    a %>% left_join(b, by = "codigo")}
+    a %>% 
+      left_join(b, by = "codigo") %>% 
+      mutate(fecha_larga_completada = is.na(fecha_larga)) %>% 
+      mutate(fecha_larga = ifelse(fecha_larga_completada, fecha_larga - 172800, fecha_larga)) %>%
+      select(-fecha_larga_completada) %>% 
+      mutate(fecha_larga = as.POSIXct(fecha_larga, origin = "1970-01-01"))}
   
-  archivos_xls <- list.files(path = "data", pattern = "\\.xls$", full.names = TRUE)
+  archivos_xls <- list.files(path = ruta, pattern = "\\.xls$", full.names = TRUE)
   listita <- map(archivos_xls, agua)
   
   df_combinado <- bind_rows(listita)%>% 
