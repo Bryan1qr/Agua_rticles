@@ -1,11 +1,11 @@
 source("scripts/generacion de tabla1.R")
 library(tidyverse)
-caplina_ocoña <- dataset_water(ruta = "CaplinaOcoña")
-
-caplina_ocoña %>% filter(codigo == "RCapi1" & PARAMETROS == "Aceites y Grasas (mg/L) ") %>% 
-  ggplot(aes(x = fecha_larga, y = valor)) + geom_line() + geom_point() +
-  geom_label(aes(label = paste(valor, format(fecha_larga, format = "%Y"), sep = "\n")), size = 3, alpha = 0.5) +
-  ggthemes::theme_wsj()
+# caplina_ocoña <- dataset_water(ruta = "CaplinaOcoña")
+# 
+# caplina_ocoña %>% filter(codigo == "RCapi1" & PARAMETROS == "Aceites y Grasas (mg/L) ") %>% 
+#   ggplot(aes(x = fecha_larga, y = valor)) + geom_line() + geom_point() +
+#   geom_label(aes(label = paste(valor, format(fecha_larga, format = "%Y"), sep = "\n")), size = 3, alpha = 0.5) +
+#   ggthemes::theme_wsj()
 
 origen_df <- "CaplinaOcoña/USHUSUMA_2011_I.xls"
 a <- readxl::read_xls(origen_df, skip = 19) %>%
@@ -46,7 +46,7 @@ b <- readxl::read_xls(path = "CaplinaOcoña/USHUSUMA_2011_I.xls", skip = 15, col
   select(fecha_larga, PARAMETROS) %>% rename("codigo" = "PARAMETROS")
 
 
-a %>% 
+x1 <- a %>% 
   left_join(b, by = "codigo") %>% 
   # Crear una bandera para saber si el valor fue completado
   mutate(fecha_larga_completada = is.na(fecha_larga)) %>% 
