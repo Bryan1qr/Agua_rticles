@@ -54,5 +54,10 @@ dataset_water <- function(ruta){
     mutate(PARAMETROS = paste0(PARAMETROS, " (", UNIDAD, ") ")) %>% 
     select(-UNIDAD, año, periodo)
   
-  as_tibble(df_combinado)
+  as_tibble(df_combinado) %>% 
+    mutate(tipo = case_when(
+      grepl("^E", codigo) ~ "léntico",  # Si el código empieza con "E"
+      grepl("^L", codigo) ~ "léntico",  # Si el código empieza con "L"
+      TRUE ~ "lótico"                   # Para el resto de los casos
+    ))
 }
