@@ -1,5 +1,5 @@
 # Creación del nuevo dataset de agua --------------------------------------
-dataset_water <- function(ruta){
+dataset_agua2 <- function(ruta, coordenadas){
   # Creamos una funciónn para la selección de los valores excel deseados:
   agua <- function(origen_df){
     a <- readxl::read_xls(origen_df, skip = 19) %>%
@@ -10,7 +10,9 @@ dataset_water <- function(ruta){
              año = str_extract(periodo, "(?<=_)(.*?)(?=_)"),
              periodo = str_extract(periodo, "(?<=_)([^_\\.]+)(?=\\.)")) %>%
       filter(valor != "----") %>%
-      select(codigo, cuenca, año, periodo, PARAMETROS, UNIDAD, valor)
+      select(codigo, cuenca, año, periodo, PARAMETROS, UNIDAD, valor) %>% 
+      mutate(UNIDAD = zoo::na.locf(UNIDAD, na.rm = FALSE), 
+             UNIDAD = if_else(UNIDAD == "mg/L P", "mg/L", UNIDAD))
     
     b <- readxl::read_xls(origen_df, skip = 15, col_names = TRUE) %>% 
       filter(`Fecha monitoreo` %in% c("Hora Monitoreo", "PARAMETROS")) %>% 
@@ -35,29 +37,30 @@ dataset_water <- function(ruta){
              fecha_larga = as.POSIXct(paste(fecha, `Hora Monitoreo`), format = "%d/%m/%Y %H:%M")) %>%
       select(fecha_larga, PARAMETROS) %>% rename("codigo" = "PARAMETROS")
     
-    a %>% 
-      left_join(b, by = "codigo") %>% 
-      mutate(fecha_larga_completada = is.na(fecha_larga)) %>% 
-      fill(fecha_larga, .direction = "downup") %>% 
-      mutate(fecha_larga = ifelse(fecha_larga_completada, fecha_larga - 172800, fecha_larga)) %>%
-      select(-fecha_larga_completada) %>% 
-      mutate(fecha_larga = as.POSIXct(fecha_larga, origin = "1970-01-01"))}
+    a %>% left_join(b, by = "codigo")}
   
   archivos_xls <- list.files(path = ruta, pattern = "\\.xls$", full.names = TRUE)
   listita <- map(archivos_xls, agua)
   
   df_combinado <- bind_rows(listita)%>% 
-    mutate(
-      valor = if_else(valor != "Ausencia", valor %>%
-                        str_replace_all("[^0-9,.-]", "") %>%
-                        str_replace(",", ".") %>% as.numeric(), 0)) %>% 
-    mutate(PARAMETROS = paste0(PARAMETROS, " (", UNIDAD, ") ")) %>% 
-    select(-UNIDAD, año, periodo)
+    mutate(valor = if_else(grepl("^Ausencia", valor), 0, parse_number(valor,locale = locale(decimal_mark = ","))),
+           codigo = case_when(
+             cuenca == "SAMA" & codigo == "RChac2" ~ "RTara1",
+             cuenca == "SAMA" & codigo == "RIrab" ~ "RTica2",
+             cuenca == "USHUSUMA" & codigo == "RpPauc" ~ "QCari2",
+             cuenca == "LOCUMBA" & codigo == "RLocu2" ~ "RSala2",
+             TRUE ~ codigo)) %>% 
+    mutate(PARAMETROS = paste0(PARAMETROS, " (", UNIDAD, ")")) %>% 
+    select(-UNIDAD, -año, -periodo) %>% distinct()
   
-  as_tibble(df_combinado) %>% 
+  espacial <- spatial1(coordenadas)
+  merge(df_combinado, espacial,  by = c("codigo", "cuenca"), all.x = TRUE) %>% 
     mutate(tipo = case_when(
-      grepl("^E", codigo) ~ "léntico",  # Si el código empieza con "E"
-      grepl("^L", codigo) ~ "léntico",  # Si el código empieza con "L"
-      TRUE ~ "lótico"                   # Para el resto de los casos
-    ))
+      grepl("^E", codigo) ~ "léntico",
+      grepl("^L", codigo) ~ "léntico",
+      TRUE ~ "lótico"),
+      cuerpo_agua = str_extract(descripcion, "^\\S+\\s+\\S+"),
+      cuerpo_agua = str_replace_all(cuerpo_agua, ",", ""),
+      cuerpo_agua = str_replace(cuerpo_agua, "^Rio\\b", "Río"),
+      cuerpo_agua = str_squish(cuerpo_agua))
 }
