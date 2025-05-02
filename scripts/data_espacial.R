@@ -4,7 +4,10 @@ spatial1 <- function(x){
   archivos <- list.files(x, pattern = "\\.xlsx$", full.names = TRUE)
   
   extraccion <- function(y){
-    read_xlsx(y, startRow = 11, colNames = FALSE) %>% 
+    db <- read_xlsx(y, skip = 10, col_names = F)
+    names(db) <- paste0("X", seq(1:16))
+    
+    db %>% 
       mutate(
         cuenca = case_when(
           str_detect(X3, regex("^Cuenca", ignore_case = TRUE)) ~ X3 %>%
@@ -17,9 +20,7 @@ spatial1 <- function(x){
           
           TRUE ~ NA_character_)) %>%
       mutate(cuenca = str_to_upper(cuenca),
-             categoria = map_chr(str_extract_all(X16, "\\b\\w"),
-                                 ~ paste0(.x, collapse = "")),
-             categoria = if_else(categoria == "C1A", "C1A2", categoria)) %>% 
+             categoria = X16) %>% 
       select(X7, X8, cuenca, X12, X13, X14, categoria) %>% 
       rename_with(~ c("codigo", "descripcion", "cuenca", "zona", "este", "norte", "categoria"),
                   everything())

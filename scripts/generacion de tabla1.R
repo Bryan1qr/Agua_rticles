@@ -43,13 +43,11 @@ dataset_agua2 <- function(ruta, coordenadas){
   listita <- map(archivos_xls, agua)
   
   df_combinado <- bind_rows(listita)%>% 
-    mutate(valor = if_else(grepl("^Ausencia", valor), 0, parse_number(valor,locale = locale(decimal_mark = ","))),
-           codigo = case_when(
-             cuenca == "SAMA" & codigo == "RChac2" ~ "RTara1",
-             cuenca == "SAMA" & codigo == "RIrab" ~ "RTica2",
-             cuenca == "USHUSUMA" & codigo == "RpPauc" ~ "QCari2",
-             cuenca == "LOCUMBA" & codigo == "RLocu2" ~ "RSala2",
-             TRUE ~ codigo)) %>% 
+    mutate(valor =  case_when(
+        grepl("^Ausencia", valor) ~ 0,
+        TRUE ~ parse_number(valor, locale = locale(decimal_mark = ","))
+      )
+    ) %>% 
     mutate(PARAMETROS = paste0(PARAMETROS, " (", UNIDAD, ")")) %>% 
     select(-UNIDAD, -año, -periodo) %>% distinct()
   
@@ -63,4 +61,5 @@ dataset_agua2 <- function(ruta, coordenadas){
       cuerpo_agua = str_replace_all(cuerpo_agua, ",", ""),
       cuerpo_agua = str_replace(cuerpo_agua, "^Rio\\b", "Río"),
       cuerpo_agua = str_squish(cuerpo_agua))
+
 }

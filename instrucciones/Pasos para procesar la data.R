@@ -17,7 +17,8 @@ library(readxl)
 
 # Paso 3 ejecución de las funciones ---------------------------------------
 
-tabla_final <- dataset_agua2(ruta = "data", coordenadas = "CUENCAS/CaplinaOcoña")
+tabla_final <- dataset_agua2(ruta = "tablas_con_parámetros",
+                             coordenadas = "tablas_con_coordenadas")
 
 view(tabla_final)
 str(tabla_final)

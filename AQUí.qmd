@@ -1,0 +1,57 @@
+---
+title: "Ejecución"
+format: html
+editor: visual
+---
+
+# Carga de paquetes:
+
+Ejecuta todoas las lineas de código:
+
+```{r}
+#| warning: false
+#| message: false
+library(tidyverse)
+library(openxlsx)
+library(zoo)
+library(readxl)
+```
+
+Si no funciona correctamente las anteriores lineas de código, probablemente sea porque no has instalado los paquetes. Para instalarlos **ejecuta** las lineas de código necesarias del siguiente espacio:
+
+```{r}
+#| eval: false
+install.packages("tidyverse")
+install.packages("openxlsx")
+install.packages("zoo")
+# install.packages("readxl") readxl no es necesario instalar
+```
+
+**Ojo** las lineas de instalación solo se realizan una vez, no es necesario instalar a cada raro. Pero si es importante activar los paquetes con **library()** cada vez que se comienza un trabajo.
+
+# Carga de los scripts
+
+Ejecuta los siguientes scripts:
+
+```{r}
+source("scripts/data_espacial.R")
+source("scripts/generacion de tabla1.R")
+```
+
+# Ejecución de la función principal
+
+```{r}
+#| warning: false
+#| message: false
+tabla_final <- dataset_agua2(
+  ruta = "tablas_con_parámetros", # coloca aquí la ruta de la carpeta
+  coordenadas = "tablas_con_coordenadas") # coloca aquí la otra carpeta
+```
+
+# Guardado del dataset
+
+Ahora guardaremos la base de datos. Ejecuta las siguientes lineas de código:\
+
+```{r}
+write.xlsx(tabla_final, "resultados/INSERTE NOMBRE DE DATASET.xlsx")
+```
