@@ -9,18 +9,8 @@ spatial1 <- function(x){
     
     db %>% 
       mutate(
-        cuenca = case_when(
-          str_detect(X3, regex("^Cuenca", ignore_case = TRUE)) ~ X3 %>%
-            str_split(" ") %>%
-            map_chr(~ str_c(.[-1], collapse = "-")),
-          
-          str_detect(X3, regex("Intercuenca", ignore_case = TRUE)) ~ X3 %>%
-            str_split(" ") %>%
-            map_chr(~ str_c(., collapse = "")),
-          
-          TRUE ~ NA_character_)) %>%
-      mutate(cuenca = str_to_upper(cuenca),
-             categoria = X16) %>% 
+        cuenca = str_extract(y, "(?<=/)(.*?)(?=.xlsx)"),
+        categoria = X16)%>% 
       select(X7, X8, cuenca, X12, X13, X14, categoria) %>% 
       rename_with(~ c("codigo", "descripcion", "cuenca", "zona", "este", "norte", "categoria"),
                   everything())
