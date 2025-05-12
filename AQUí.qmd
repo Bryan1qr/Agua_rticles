@@ -55,3 +55,99 @@ Ahora guardaremos la base de datos. Ejecuta las siguientes lineas de código:\
 ```{r}
 write.xlsx(tabla_final, "resultados/aaa_caplina_ocoña.xlsx")
 ```
+
+# Comprobación de errores
+
+```{r}
+archivos_xls <- list.files(path = "tablas_con_parámetros", 
+                           pattern = "\\.xls$", full.names = TRUE)
+archivos_xls[20]
+```
+
+## Analisis espacial
+
+```{r}
+library(sf)
+library(geoidep)
+library(ggspatial)
+library(patchwork)
+df1 <- read.xlsx("resultados/aaa_amazonas.xlsx")
+df2 <- read.xlsx("resultados/aaa_caplina_ocoña.xlsx")
+df3 <- read.xlsx("resultados/AAA_JZ_filtros.xlsx", sheet = 1)
+
+combinado <- rbind(df1, df2, df3) %>% 
+  mutate(fecha_larga = as.POSIXct(
+    fecha_larga * 86400,
+    origin = "1899-12-30", tz = "UTC"))
+
+source("scripts/filtrado.R")
+
+combinado_filtrado <- combinado %>% filtrado() %>%
+  filter(fecha_larga > "2020-01-01")
+
+espacial1 <- combinado %>% 
+    select(-c(PARAMETROS, valor, fecha_larga)) %>% 
+    distinct() %>% 
+    filter(!is.na(zona)) %>% 
+  mutate(zona = zona + 32700) %>% 
+  group_split(zona) %>%
+  map_dfr(~ .x %>%
+            st_as_sf(coords = c("este", "norte"), 
+                     crs = unique(.x$zona)) %>%
+            st_transform(crs = 4326))
+
+
+
+espacial2 <- combinado_filtrado %>% 
+  filter(PARAMETROS == "Coliformes Termotolerantes (NMP/100ml)") %>% 
+  select(-c(PARAMETROS, valor, fecha_larga)) %>% 
+    distinct() %>% 
+    filter(!is.na(zona)) %>% 
+  mutate(zona = zona + 32700) %>% 
+  group_split(zona) %>%
+  map_dfr(~ .x %>%
+            st_as_sf(coords = c("este", "norte"), 
+                     crs = unique(.x$zona)) %>%
+            st_transform(crs = 4326))
+
+
+# Graficando:
+
+dep <- get_departaments(show_progress = FALSE)
+
+estilo <- theme(plot.title = element_text(face = "bold", size = 11, hjust = 0.5),
+        plot.subtitle = element_text(face = "italic", size = 11, hjust = 0.5),
+        panel.background = element_rect(colour = "gray50"),
+        panel.grid = element_line(linewidth = 0.1, colour = "gray50"))
+
+g1 <- ggplot() + 
+  geom_sf(color = "darkblue", size = 4, alpha = 0.2, data = espacial1) + 
+  geom_sf(color = "gray10", size = 4, alpha = 0.2, data = dep) + 
+  labs(title = "Zonas con datos recolectados",
+       subtitle = "Avance a la fecha") +
+  annotation_scale(style = "ticks",
+                           location = "bl", width_hint = 0.5) + 
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         style = north_arrow_fancy_orienteering()) +
+  theme_bw() +
+  estilo
+  
+g2 <- ggplot() + 
+  geom_sf(color = "darkblue", size = 4, alpha = 0.2, data = espacial2) + 
+  geom_sf(color = "gray10", size = 4, alpha = 0.2, data = dep) + 
+  labs(title = "Zonas con alta concentración de coliformes",
+       subtitle = "Valores mayores a 1000 NMP/100ml") +
+  annotation_scale(style = "ticks",
+                           location = "bl", width_hint = 0.5) + 
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         style = north_arrow_fancy_orienteering()) +
+  theme_bw()+
+  estilo
+
+
+
+g1 | g2
+
+ggsave("mapa_coliformes.png", width = 19, height = 12,
+       dpi = 300, units = "cm")
+```
