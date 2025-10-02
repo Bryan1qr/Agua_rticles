@@ -1,0 +1,265 @@
+---
+title: "Ejecución"
+format: html
+editor: visual
+---
+
+# Carga de paquetes:
+
+Ejecuta todoas las lineas de código:
+
+```{r}
+#| warning: false
+#| message: false
+library(tidyverse)
+library(openxlsx)
+library(zoo)
+library(readxl)
+```
+
+Si no funciona correctamente las anteriores lineas de código, probablemente sea porque no has instalado los paquetes. Para instalarlos **ejecuta** las lineas de código necesarias del siguiente espacio:
+
+```{r}
+#| eval: false
+install.packages("tidyverse")
+install.packages("openxlsx")
+install.packages("zoo")
+# install.packages("readxl") readxl no es necesario instalar
+```
+
+**Ojo** las lineas de instalación solo se realizan una vez, no es necesario instalar a cada raro. Pero si es importante activar los paquetes con **library()** cada vez que se comienza un trabajo.
+
+# Carga de los scripts
+
+Ejecuta los siguientes scripts:
+
+```{r}
+source("scripts/data_espacial.R")
+source("scripts/generacion de tabla1.R")
+```
+
+# Ejecución de la función principal
+
+```{r}
+#| warning: false
+#| message: false
+tabla_final <- dataset_agua2(
+      ruta = "param_azangaro", # coloca aquí la ruta de la carpeta
+  coordenadas = "espacial_azangaro") # coloca aquí la otra carpeta
+```
+
+```{r}
+tabla_final2 <- tabla_final %>%
+  mutate(cuerpo_agua = str_extract(descripcion, "^[^,]+"),  # Extrae desde el inicio hasta la primera coma
+         cuerpo_agua = str_replace_all(cuerpo_agua, ",", ""),  # Elimina cualquier coma restante
+         cuerpo_agua = str_replace(cuerpo_agua, "^Rio\\b", "Río"),  # Corrige 'Rio' a 'Río' al inicio
+         cuerpo_agua = str_squish(cuerpo_agua))
+
+
+tabla_final2 %>%
+    filter(is.na(este)) %>% 
+    select(cuenca, codigo) %>% distinct() %>% arrange(cuenca)
+```
+
+# Guardado del dataset
+
+Ahora guardaremos la base de datos. Ejecuta las siguientes lineas de código:\
+
+```{r}
+write.xlsx(tabla_final, "resultados/aaa_caplina_ocoña.xlsx")
+```
+
+# Comprobación de errores
+
+```{r}
+archivos_xls <- list.files(path = "tablas_con_parámetros", 
+                           pattern = "\\.xls$", full.names = TRUE)
+archivos_xls[20]
+```
+
+## Analisis espacial
+
+```{r}
+library(sf)
+library(geoidep)
+library(ggspatial)
+library(patchwork)
+df1 <- read.xlsx("resultados/aaa_amazonas.xlsx")
+df2 <- read.xlsx("resultados/aaa_caplina_ocoña.xlsx")
+df3 <- read.xlsx("resultados/AAA_JZ_filtros.xlsx", sheet = 1)
+
+combinado <- rbind(df1, df2, df3) %>% 
+  mutate(fecha_larga = as.POSIXct(
+    fecha_larga * 86400,
+    origin = "1899-12-30", tz = "UTC"))
+
+source("scripts/filtrado.R")
+
+combinado_filtrado <- combinado %>% filtrado() %>%
+  filter(fecha_larga > "2020-01-01")
+
+espacial1 <- combinado %>% 
+    select(-c(PARAMETROS, valor, fecha_larga)) %>% 
+    distinct() %>% 
+    filter(!is.na(zona)) %>% 
+  mutate(zona = zona + 32700) %>% 
+  group_split(zona) %>%
+  map_dfr(~ .x %>%
+            st_as_sf(coords = c("este", "norte"), 
+                     crs = unique(.x$zona)) %>%
+            st_transform(crs = 4326))
+
+
+
+espacial2 <- combinado_filtrado %>% 
+  filter(PARAMETROS == "Coliformes Termotolerantes (NMP/100ml)") %>% 
+  select(-c(PARAMETROS, valor, fecha_larga)) %>% 
+    distinct() %>% 
+    filter(!is.na(zona)) %>% 
+  mutate(zona = zona + 32700) %>% 
+  group_split(zona) %>%
+  map_dfr(~ .x %>%
+            st_as_sf(coords = c("este", "norte"), 
+                     crs = unique(.x$zona)) %>%
+            st_transform(crs = 4326))
+
+
+# Graficando:
+
+dep <- get_departaments(show_progress = FALSE)
+
+estilo <- theme(plot.title = element_text(face = "bold", size = 11, hjust = 0.5),
+        plot.subtitle = element_text(face = "italic", size = 11, hjust = 0.5),
+        panel.background = element_rect(colour = "gray50"),
+        panel.grid = element_line(linewidth = 0.1, colour = "gray50"))
+
+g1 <- ggplot() + 
+  geom_sf(color = "darkblue", size = 4, alpha = 0.2, data = espacial1) + 
+  geom_sf(color = "gray10", size = 4, alpha = 0.2, data = dep) + 
+  labs(title = "Zonas con datos recolectados",
+       subtitle = "Avance a la fecha") +
+  annotation_scale(style = "ticks",
+                           location = "bl", width_hint = 0.5) + 
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         style = north_arrow_fancy_orienteering()) +
+  theme_bw() +
+  estilo
+  
+g2 <- ggplot() + 
+  geom_sf(color = "darkblue", size = 4, alpha = 0.2, data = espacial2) + 
+  geom_sf(color = "gray10", size = 4, alpha = 0.2, data = dep) + 
+  labs(title = "Zonas con alta concentración de coliformes",
+       subtitle = "Valores mayores a 1000 NMP/100ml") +
+  annotation_scale(style = "ticks",
+                           location = "bl", width_hint = 0.5) + 
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         style = north_arrow_fancy_orienteering()) +
+  theme_bw()+
+  estilo
+
+
+
+g1 | g2
+
+ggsave("mapa_coliformes.png", width = 19, height = 12,
+       dpi = 300, units = "cm")
+```
+
+# Combinando la data
+
+```{r}
+lista1 <- list.files(path = "resultados", pattern = "*.xlsx", full.names = TRUE)
+
+listado2 <- map(lista1, read_xlsx)
+
+tabla_unificada <- listado2 %>% bind_rows() %>%
+    mutate(fecha_larga = as.POSIXct(
+    fecha_larga * 86400,
+    origin = "1899-12-30", tz = "UTC"))
+
+# Fechas faltantes:
+tabla_unificada %>% filter(is.na(fecha_larga)) %>%
+    select(cuenca, codigo, cuerpo_agua) %>%
+    distinct() %>% openxlsx::write.xlsx("vacio_info.xlsx")
+
+# Pegamos la tabla de datos con fechas completadas:
+df <- read.delim("clipboard") %>%
+        mutate(fecha_larga = as.POSIXct(
+            fecha_larga,format = "%m/%d/%Y %H:%M", tz = "UTC"))
+
+dfxx <- tabla_unificada %>% filter(!cuenca %in% reemplazos)
+tabla_unificada2 <- rbind(dfxx, tabla_final2 %>% select(names(dfxx)))
+
+tabla_unificada_actualizada <- tabla_unificada2 %>%
+  left_join(
+    df %>% select(codigo, fecha_larga), 
+    by = "codigo",
+    suffix = c("", "_nuevo")
+  ) %>%
+  mutate(
+    fecha_larga = coalesce(fecha_larga, fecha_larga_nuevo)
+  ) %>%
+  select(-fecha_larga_nuevo)
+
+dff <- read.delim("clipboard")
+
+tabla_unificada_actualizada %>%
+    left_join(
+    dff %>% select(codigo, este, norte, categoria),
+        by = "codigo",
+    suffix = c("", "_nuevo")
+  ) %>%
+  mutate(
+    fecha_larga = coalesce(fecha_larga, fecha_larga_nuevo)
+  ) %>%
+  select(-fecha_larga_nuevo))
+
+tabla_unificada_actualizada2 <- tabla_unificada_actualizada %>%
+  left_join(
+    dff %>% select(codigo, este, norte, categoria),
+    by = "codigo",
+    suffix = c("", "_nuevo")
+  ) %>%
+  mutate(
+    across(c(este, norte, categoria, fecha_larga),
+           ~ coalesce(.x, get(paste0(cur_column(), "_nuevo"))))
+  ) %>%
+  select(-ends_with("_nuevo"))
+
+tabla_unificada %>% filter(is.na(este)) %>%
+    select(cuenca, codigo) %>%
+    distinct() %>% openxlsx::write.xlsx("vacio_info2.xlsx")
+
+tabla_unificada |> filter(fecha_larga > '2100-01-01' | fecha_larga < '2000-01-01') %>%
+    select(cuenca, codigo, fecha_larga, cuerpo_agua) %>%
+    mutate(fecha_larga = format(fecha_larga, "%Y-%m-%d %H:%M")) %>%
+    distinct() %>% openxlsx::write.xlsx("vacio_info3.xlsx")
+    
+
+# coordenadas faltantes:
+tabla_unificada %>% filter(is.na(este)) %>%
+    select(cuenca, codigo) %>%
+    distinct()
+```
+
+Cuencas con falta de coordenadas:
+
+-   Urubamba
+
+-   Crisnejas
+
+-   Huarme
+
+-   BIABO-2015
+
+-   Topará
+
+Cuencas con falta de fechas:
+
+-   Marañon5
+
+-   INTERCUENCA49953
+
+-   CHANCAY-HUARAL
+
+-   CHANCAY-HUARAL
